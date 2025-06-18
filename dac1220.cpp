@@ -19,9 +19,10 @@ Lisence:
 #include "SPI.h"
 #include "dac1220.h"
 
-DAC1220::DAC1220(bool uselowresolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds)
+DAC1220::DAC1220(SPIClass* spiconnection, bool uselowresolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds)
 {
     Use16Bits = uselowresolution;
+    SPIConnection = spiconnection;
     ConnectionSettings = SPISettings(100000,MSBFIRST,SPI_MODE1);
     CSPin = cs;
     SCLKPin = sclk;
@@ -62,23 +63,23 @@ void DAC1220::reset()
 
 void DAC1220::selfcalibrate()
 {
-    SPI.beginTransaction(ConnectionSettings);
+    SPIConnection->beginTransaction(ConnectionSettings);
     digitalWrite(CSPin, LOW);
     delayMicroseconds(12);
     //Start Self-Calibration
-    SPI.transfer(0x05);
+    SPIConnection->transfer(0x05);
     delayMicroseconds(15);
     if (Use16Bits)
     {
-        SPI.transfer(0x21); //16-bit resolution
+        SPIConnection->transfer(0x21); //16-bit resolution
     }
     else
     {
-        SPI.transfer(0xA1); //20-bit resolution
+        SPIConnection->transfer(0xA1); //20-bit resolution
     }
     delayMicroseconds(12);
     digitalWrite(CSPin, HIGH);
-    SPI.endTransaction();
+    SPIConnection->endTransaction();
     //Wait 500ms for Self-Calibration to complete
     delay(500);
 }
@@ -118,14 +119,14 @@ void DAC1220::writeV(float v)
 
 void DAC1220::writeCode(uint32_t code)
 {
-    SPI.beginTransaction(ConnectionSettings);
+    SPIConnection->beginTransaction(ConnectionSettings);
     digitalWrite(CSPin, LOW);
     delayMicroseconds(12);
-    SPI.transfer(0x40);
+    SPIConnection->transfer(0x40);
     delayMicroseconds(15);
-    SPI.transfer( (code & 0x00FF0000) >> 16 );
-    SPI.transfer( (code & 0x0000FF00) >> 8 );
-    SPI.transfer( (code & 0x000000FF) );
+    SPIConnection->transfer( (code & 0x00FF0000) >> 16 );
+    SPIConnection->transfer( (code & 0x0000FF00) >> 8 );
+    SPIConnection->transfer( (code & 0x000000FF) );
     digitalWrite(CSPin, HIGH);
-    SPI.endTransaction();
+    SPIConnection->endTransaction();
 }

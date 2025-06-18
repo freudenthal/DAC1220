@@ -19,16 +19,20 @@ Modified John Freudenthal 2025-06-18
 
 #ifndef _DAC1220_H_
 #define _DAC1220_H_
+#include <Arduino.h>
+#include "SPI.h"
 
-class DAC1220 {
+class DAC1220
+{
     public:
-        DAC1220(bool uselowresolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds);
+        DAC1220(SPIClass* spiconnection, bool uselowresolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds);
         void begin();
         void reset();
         void writeV(float v);
         void writeCode(uint32_t code);
         void selfcalibrate();
     private:
+        SPIClass* SPIConnection;
         bool Use16Bits;
         SPISettings ConnectionSettings;
         uint8_t Resolution;
