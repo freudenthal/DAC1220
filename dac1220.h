@@ -20,9 +20,6 @@ Modified John Freudenthal 2025-06-18
 #ifndef _DAC1220_H_
 #define _DAC1220_H_
 
-#define RESOLUTION_16BIT (0x01)
-#define RESOLUTION_20BIT (0x02)
-
 class DAC1220 {
     public:
         DAC1220(bool uselowresolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds);
