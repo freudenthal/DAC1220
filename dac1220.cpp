@@ -19,14 +19,7 @@ Lisence:
 #include "SPI.h"
 #include "dac1220.h"
 
-DAC1220::DAC1220()
-{
-    ConnectionSettings = SPISettings(100000,MSBFIRST,SPI_MODE1);
-    Resolution = RESOLUTION_20BIT;
-    CSPin = 5;
-}
-
-DAC1220::DAC1220(uint8_t resolution, uint8_t cs)
+DAC1220::DAC1220(uint8_t resolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds)
 {
     if (resolution == RESOLUTION_16BIT)
     {
@@ -36,10 +29,11 @@ DAC1220::DAC1220(uint8_t resolution, uint8_t cs)
     {
         Resolution = RESOLUTION_20BIT;
     }
-    ConnectionSettings = SPISettings(200000,MSBFIRST,SPI_MODE1);
+    ConnectionSettings = SPISettings(100000,MSBFIRST,SPI_MODE1);
     CSPin = cs;
+    SCLKPin = sclk;
+    ClockPerioduS = clockperiodmicroseconds;
 }
-
 
 void DAC1220::begin()
 {
@@ -49,24 +43,27 @@ void DAC1220::begin()
 //Call SPI.end prior, and SPI.begin after to re-establish SPI connection, or prior to SPI.begin in start()
 void DAC1220::reset()
 {
+    uint32_t Delay0 = (uint32_t)(600 * ClockPerioduS); //First high period (600 clocks 512min 800max)
+    uint32_t Delay1 = (uint32_t)(1200 * ClockPerioduS); //Second high period (1200 clocks 1024min 1800max)
+    uint32_t Delay2 = (uint32_t)(2200 * ClockPerioduS); //Second high period (2400 clocks 2048min 2400max)
+    uint32_t LowDelay = (uint32_t)(20 * ClockPerioduS); //Low period delay (10 clocks min no max)
     pinMode(CSPin, OUTPUT);
     digitalWrite(CSPin, LOW);
-    //Reset DAC
-    pinMode(24, OUTPUT);
-    digitalWrite(24, LOW);
-    delay(1);
-    digitalWrite(24, HIGH);
-    delayMicroseconds(240); //First high period (600 clocks)
-    digitalWrite(24, LOW);
-    delayMicroseconds(5);
-    digitalWrite(24, HIGH);
-    delayMicroseconds(480); //Second high period (1200 clocks)
-    digitalWrite(24, LOW);
-    delayMicroseconds(5);
-    digitalWrite(24, HIGH);
-    delayMicroseconds(960); //Second high period (2400 clocks)
-    digitalWrite(24, LOW);
-    delay(1);
+    pinMode(SCLKPin, OUTPUT);
+    digitalWrite(SCLKPin, LOW);
+    delay(LowDelay);
+    digitalWrite(SCLKPin, HIGH);
+    delayMicroseconds( Delay0 );
+    digitalWrite(SCLKPin, LOW);
+    delayMicroseconds(LowDelay);
+    digitalWrite(SCLKPin, HIGH);
+    delayMicroseconds(Delay1);
+    digitalWrite(SCLKPin, LOW);
+    delayMicroseconds(LowDelay);
+    digitalWrite(SCLKPin, HIGH);
+    delayMicroseconds(Delay2);
+    digitalWrite(SCLKPin, LOW);
+    delay(LowDelay);
     digitalWrite(CSPin, HIGH);
 }
 
@@ -86,6 +83,7 @@ void DAC1220::selfcalibrate()
     {
         SPI.transfer(0xA1); //20-bit resolution
     }
+    delayMicroseconds(12);
     digitalWrite(CSPin, HIGH);
     SPI.endTransaction();
     //Wait 500ms for Self-Calibration to complete

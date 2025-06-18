@@ -25,8 +25,7 @@ Modified John Freudenthal 2025-06-18
 
 class DAC1220 {
     public:
-        DAC1220();
-        DAC1220(uint8_t resolution, uint8_t cs);
+        DAC1220(uint8_t resolution, uint8_t cs, uint8_t sclk);
         void begin();
         void reset();
         void writeV(float v);
@@ -36,6 +35,8 @@ class DAC1220 {
         SPISettings ConnectionSettings;
         uint8_t Resolution;
         uint8_t CSPin;
+        uint8_t SCLKPin;
+        float ClockPerioduS;
 };
 
 #endif
