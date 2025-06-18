@@ -19,16 +19,9 @@ Lisence:
 #include "SPI.h"
 #include "dac1220.h"
 
-DAC1220::DAC1220(uint8_t resolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds)
+DAC1220::DAC1220(bool uselowresolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds)
 {
-    if (resolution == RESOLUTION_16BIT)
-    {
-        Resolution = RESOLUTION_16BIT;
-    }
-    else
-    {
-        Resolution = RESOLUTION_20BIT;
-    }
+    Use16Bits = uselowresolution;
     ConnectionSettings = SPISettings(100000,MSBFIRST,SPI_MODE1);
     CSPin = cs;
     SCLKPin = sclk;
@@ -75,7 +68,7 @@ void DAC1220::selfcalibrate()
     //Start Self-Calibration
     SPI.transfer(0x05);
     delayMicroseconds(15);
-    if (Resolution == RESOLUTION_16BIT)
+    if (Use16Bits)
     {
         SPI.transfer(0x21); //16-bit resolution
     }
@@ -102,16 +95,7 @@ void DAC1220::writeV(float v)
     {
         v = 5.0;
     }
-    if (Resolution == RESOLUTION_20BIT)
-    {
-        code = (uint32_t)(v/5 * 0xFFFFF + 0.5);
-        writeCode(code << 4);
-        if (code > 0xFFFFF)
-        {
-            code = 0xFFFFF;
-        }
-    }
-    else if (Resolution == RESOLUTION_16BIT)
+    if (Use16Bits)
     {
         code = (uint32_t)(v/5 * 0xFFFF + 0.5);
         if (code > 0xFFFF)
@@ -119,6 +103,15 @@ void DAC1220::writeV(float v)
             code = 0xFFFF;
         }
         writeCode(code << 8);
+    }
+    else
+    {
+        code = (uint32_t)(v/5 * 0xFFFFF + 0.5);
+        writeCode(code << 4);
+        if (code > 0xFFFFF)
+        {
+            code = 0xFFFFF;
+        }
     }
 }
 
@@ -130,9 +123,9 @@ void DAC1220::writeCode(uint32_t code)
     delayMicroseconds(12);
     SPI.transfer(0x40);
     delayMicroseconds(15);
-    SPI.transfer((code&0x00FF0000)>>16);
-    SPI.transfer((code&0x0000FF00)>>8);
-    SPI.transfer((code&0x000000FF));
+    SPI.transfer( (code & 0x00FF0000) >> 16 );
+    SPI.transfer( (code & 0x0000FF00) >> 8 );
+    SPI.transfer( (code & 0x000000FF) );
     digitalWrite(CSPin, HIGH);
     SPI.endTransaction();
 }

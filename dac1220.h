@@ -25,13 +25,14 @@ Modified John Freudenthal 2025-06-18
 
 class DAC1220 {
     public:
-        DAC1220(uint8_t resolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds);
+        DAC1220(bool uselowresolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds);
         void begin();
         void reset();
         void writeV(float v);
         void writeCode(uint32_t code);
         void selfcalibrate();
     private:
+        bool Use16Bits;
         SPISettings ConnectionSettings;
         uint8_t Resolution;
         uint8_t CSPin;
