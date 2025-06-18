@@ -13,6 +13,8 @@ Author:
 Peng Wei          info@sandboxelectronics.com
 
 Lisence:
+
+Modified John Freudenthal 2025-06-18
 */
 
 #ifndef _DAC1220_H_
@@ -29,17 +31,11 @@ class DAC1220 {
         void reset();
         void writeV(float v);
         void writeCode(uint32_t code);
-
+        void selfcalibrate();
     private:
+        SPISettings ConnectionSettings;
         uint8_t Resolution;
         uint8_t CSPin;
 };
 
 #endif
-
-
-
-
-
-
-
