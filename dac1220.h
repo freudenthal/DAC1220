@@ -25,7 +25,7 @@ Modified John Freudenthal 2025-06-18
 
 class DAC1220 {
     public:
-        DAC1220(uint8_t resolution, uint8_t cs, uint8_t sclk);
+        DAC1220(uint8_t resolution, uint8_t cs, uint8_t sclk, float clockperiodmicroseconds);
         void begin();
         void reset();
         void writeV(float v);
