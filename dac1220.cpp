@@ -84,6 +84,10 @@ void DAC1220::selfcalibrate()
     delay(500);
 }
 
+bool DAC1220::Is16Bit()
+{
+    return Use16Bits;
+}
 
 void DAC1220::writeV(float v)
 {
@@ -116,17 +120,44 @@ void DAC1220::writeV(float v)
     }
 }
 
+bool DAC1220::GetVerbose()
+{
+    return Verbose;
+}
+
+void DAC1220::SetVerbose(bool VerboseToSet)
+{
+    Verbose = VerboseToSet;
+}
 
 void DAC1220::writeCode(uint32_t code)
 {
+    uint32_t SentCode = code << 4;
+    if (SentCode > 16777215)
+    {
+        SentCode = 16777215;
+    }
     SPIConnection->beginTransaction(ConnectionSettings);
     digitalWrite(CSPin, LOW);
     delayMicroseconds(12);
     SPIConnection->transfer(0x40);
     delayMicroseconds(15);
-    SPIConnection->transfer( (code & 0x00FF0000) >> 16 );
-    SPIConnection->transfer( (code & 0x0000FF00) >> 8 );
-    SPIConnection->transfer( (code & 0x000000FF) );
+    uint8_t Byte0 = (SentCode & 0x00FF0000) >> 16;
+    uint8_t Byte1 = (SentCode & 0x0000FF00) >> 8;
+    uint8_t Byte2 = (SentCode & 0x000000FF);
+    SPIConnection->transfer( Byte0 );
+    SPIConnection->transfer( Byte1 );
+    SPIConnection->transfer( Byte2 );
     digitalWrite(CSPin, HIGH);
     SPIConnection->endTransaction();
+    if (Verbose)
+    {
+        Serial.print("[DAC1220DBG](");
+        Serial.print(Byte0,HEX);
+        Serial.print(",");
+        Serial.print(Byte1,HEX);
+        Serial.print(",");
+        Serial.print(Byte2,HEX);
+        Serial.print(")\n");
+    }
 }

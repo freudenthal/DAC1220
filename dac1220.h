@@ -31,6 +31,9 @@ class DAC1220
         void writeV(float v);
         void writeCode(uint32_t code);
         void selfcalibrate();
+        bool Is16Bit();
+        bool GetVerbose();
+        void SetVerbose(bool VerboseToSet);
     private:
         SPIClass* SPIConnection;
         bool Use16Bits;
@@ -39,6 +42,7 @@ class DAC1220
         uint8_t CSPin;
         uint8_t SCLKPin;
         float ClockPerioduS;
+        bool Verbose;
 };
 
 #endif
