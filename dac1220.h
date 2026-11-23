@@ -43,6 +43,7 @@ class DAC1220
         uint8_t SCLKPin;
         float ClockPerioduS;
         bool Verbose;
+        void writeCommandRegister(uint8_t Byte1, uint8_t Byte0);
 };
 
 #endif
