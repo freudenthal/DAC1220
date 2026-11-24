@@ -10,7 +10,8 @@ question is whether the FCR that self-calibration produced is wrong, or the hard
 Serial commands (115200 baud, one per line):
   pct <p>     output p percent of full scale (0 to 100)
   code <n>    write a raw code (decimal; 0..1048575 in 20-bit mode)
-  cal         run self-calibration again (about 0.5 s)
+  cal         run self-calibration again (about 0.5 s), VOUT disconnected during it (CALPIN = 0)
+  calpin      run self-calibration with VOUT connected (CALPIN = 1), so the load on VOUT is seen
   clr         clear calibration: OCR = 000000h, FCR = 800000h (uncalibrated)
   fcr <hex>   write the FCR, e.g. fcr 800000
   ocr <hex>   write the OCR (24-bit two's complement), e.g. ocr 000000
@@ -25,7 +26,9 @@ Test sequence (works on a write-only board; no read-back needed):
      capacitors C1/C2 (20-bit mode: 10 nF and 3.3 nF), and the reference.
   3. cal (now that everything has been powered for a while), then measure again. If the range is
      now right, the start-up calibration ran before the clock, supplies or reference had settled.
-  4. Optional workaround: after clr, step the FCR (fcr 880000, fcr 8C0000, ...) and measure the
+  4. calpin, then measure. If the range is now right, something loading VOUT is what the normal
+     (CALPIN = 0) calibration cannot see; check what VOUT drives. VOUT moves during this run.
+  5. Optional workaround: after clr, step the FCR (fcr 880000, fcr 8C0000, ...) and measure the
      slope; the relationship is linear, so two points give the FCR for the gain you want.
 
 Read-back wiring: SDIO must reach the SPI bus's RX pin as well as its TX pin. On the PEM/PEMCSC
@@ -82,7 +85,7 @@ void setup()
     Dac.begin(); // waits out the I/O recovery timeout, sets the format, self-calibrates
     Dac.writeCode(0);
     delay(2000); // time to open the serial monitor
-    Serial.println("DAC1220 calibration diagnostics. Commands: pct, code, cal, clr, fcr, ocr, regs, verbose");
+    Serial.println("DAC1220 calibration diagnostics. Commands: pct, code, cal, calpin, clr, fcr, ocr, regs, verbose");
 }
 
 void loop()
@@ -139,6 +142,11 @@ void runCommand(char* command)
     {
         Dac.selfcalibrate();
         Serial.println("Self-calibration done; re-send pct/code before measuring");
+    }
+    else if (strcmp(command, "calpin") == 0)
+    {
+        Dac.selfcalibrate(true);
+        Serial.println("Self-calibration (CALPIN = 1, VOUT connected) done; re-send pct/code before measuring");
     }
     else if (strcmp(command, "clr") == 0)
     {

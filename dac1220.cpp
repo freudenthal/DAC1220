@@ -37,6 +37,9 @@ friends, ReadbackWorks()), which needs SDIO wired to the bus's RX pin (see SetRe
 static const uint8_t CMRByte1 = 0x20;
 // CRST (bit 9, byte 1 bit 1): in Normal mode, writing 1 sets OCR to 000000h and FCR to 800000h.
 static const uint8_t CMRByte1CRST = 0x02;
+// CALPIN (bit 14, byte 1 bit 6): 1 keeps VOUT connected during self-calibration, so the
+// calibration includes the load on the output. 0 (default) disconnects it.
+static const uint8_t CMRByte1CALPIN = 0x40;
 // Byte 0 (address 5): RES (bit 7, 1 = 20-bit), CLR 0, DF (bit 5, 1 = straight binary), DISF 0,
 // BD 0 (address increments: MSB first), MSB 0 (bits MSB first), MD (bits 1-0).
 static const uint8_t CMRByte0Res20 = 0x80;
@@ -142,17 +145,19 @@ void DAC1220::writeCommandRegister(uint8_t Byte1, uint8_t Byte0)
 
 // The datasheet: "No other bits should be changed in the Command Register when setting [Self
 // calibration] mode." So the resolution and straight-binary format are set first, in Normal mode,
-// and self-calibration is then started with the same bits. The DAC returns to Normal mode itself.
+// and self-calibration is then started with the same bits (CALPIN included). The DAC returns to
+// Normal mode itself.
 uint8_t DAC1220::FormatByte()
 {
     return CMRByte0StraightBinary | (Use16Bits ? 0x00 : CMRByte0Res20);
 }
 
-void DAC1220::selfcalibrate()
+void DAC1220::selfcalibrate(bool outputConnected)
 {
     uint8_t Format = FormatByte();
-    writeCommandRegister(CMRByte1, Format | CMRModeNormal);
-    writeCommandRegister(CMRByte1, Format | CMRModeSelfCalibration);
+    uint8_t Byte1 = CMRByte1 | (outputConnected ? CMRByte1CALPIN : 0x00);
+    writeCommandRegister(Byte1, Format | CMRModeNormal);
+    writeCommandRegister(Byte1, Format | CMRModeSelfCalibration);
     delay(SelfCalibrationMillis);
 }
 
@@ -360,14 +365,14 @@ uint32_t DAC1220::readCode()
 }
 
 // True when the CMR reads back as written: bit 13 is 1, bits 12, 10 and 8 are 0 (Table 13; bit 11's
-// reset value is given inconsistently, so it is not checked), ADPT and CALPIN are 0, and byte 0
+// reset value is given inconsistently, so it is not checked), ADPT is 0 (CALPIN may be either), and byte 0
 // holds the format set by selfcalibrate() in Normal mode. A disconnected RX pin reads 0000h or
 // FFFFh and fails.
 bool DAC1220::ReadbackWorks()
 {
     uint16_t CMR = readCommandRegister();
     bool FixedBits = ((CMR & 0x2000) == 0x2000) && ((CMR & 0x1500) == 0);
-    bool Byte1Bits = (CMR & 0xC000) == 0;
+    bool Byte1Bits = (CMR & 0x8000) == 0;
     bool Format = (CMR & 0x00FF) == (FormatByte() | CMRModeNormal);
     return FixedBits && Byte1Bits && Format;
 }

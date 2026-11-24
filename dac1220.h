@@ -30,7 +30,9 @@ class DAC1220
         void reset();
         void writeV(float v);
         void writeCode(uint32_t code);
-        void selfcalibrate();
+        // outputConnected sets CALPIN: false (default) disconnects VOUT during calibration, so a
+        // load on VOUT is not seen; true keeps VOUT connected (it moves during the ~0.5 s run).
+        void selfcalibrate(bool outputConnected = false);
         bool Is16Bit();
         bool GetVerbose();
         void SetVerbose(bool VerboseToSet);
