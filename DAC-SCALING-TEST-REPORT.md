@@ -3,7 +3,9 @@
 **Date:** 2026-11-24
 **Branch:** `debug/dac-scaling` (commits `38802ae` and `a0976f8`, on top of `82239dd`)
 **Hardware:** PEM/PEMCSC controller rev01, RP2040, DAC1220E
-**Status:** The cause is not found yet, but it is almost certainly in the hardware. The firmware, the library and the start-up timing are ruled out. A load on VOUT is unlikely.
+**Status:** The cause is not found yet, but it is almost certainly in the hardware. The firmware, the library and the start-up timing are ruled out. A load on VOUT is unlikely. A hand-set gain value works around the fault to within about 0.7 mV between 10% and 90%. See [Workaround: hand-set gain value](#workaround-hand-set-gain-value).
+
+> **Added after testing:** the output filter capacitor C2 (pin 10 to VOUT) was not fitted during any of these tests. The datasheet treats it as a required part of the output filter. Anecdotally, though, the fault first appeared with C2 fitted (3300 pF), and removing it made no noticeable difference. So the missing C2 probably isn't the cause, but this hasn't been confirmed by measurement. See [Conclusions](#conclusions).
 
 ## Summary
 
@@ -46,6 +48,7 @@ So the investigation moved to the calibration registers and the hardware.
 - **Read-back:** not possible on this board. GP28 (SPI1 RX) is not connected to SDIO on rev01, so the DAC1220 is write-only.
 - **Heater:** disconnected in hardware for all tests. The diagnostic sketch also holds GP15 high (heater off) from start-up.
 - **Reference:** VREF measured at **2.5003 V**.
+- **Removed parts:** C2 (3.3 nF, pin 10 to VOUT) was **not fitted** for any test. A 0 Ω resistor had also been removed, and stayed out for every test. C1's value and type weren't checked.
 - **Firmware:** [examples/CalibrationDiagnostics/CalibrationDiagnostics.ino](examples/CalibrationDiagnostics/CalibrationDiagnostics.ino), built with arduino-cli 1.6.0 and flashed by UF2. Commands were sent over USB serial, and VOUT was read with a meter.
 
 ### Library additions used by the tests
@@ -121,22 +124,81 @@ The normal calibration (CALPIN = 0) disconnects VOUT, so it can't see anything l
 | SPI writes not reaching the DAC | Ruled out | Test 4: the FCR change took effect exactly as predicted |
 | Self-calibration running before things settle | Ruled out | Test 3: same result once settled |
 | A load on VOUT | Unlikely | Test 5: calibrating with VOUT connected doesn't change the result |
-| Leakage or wrong parts at the filter capacitors C1/C2 | Open, most likely | Large uncalibrated gain error that calibration can't remove |
+| Leakage or wrong parts at C1 | Open, most likely | Large uncalibrated gain error that calibration can't remove |
 | A damaged or non-genuine DAC1220 | Open | Same evidence |
+| C2 not fitted | Probably not the cause, unconfirmed | Missing for every test, but anecdotally the fault was present with C2 fitted and unchanged by removing it |
 
-**Why the filter capacitors are suspected:** in the datasheet's Figure 5, C1 connects between the C1 pin (pin 9) and VREF, and C2 between the C2 pin (pin 10) and VOUT. Leakage across C1, or from that node to the VREF guard ring, is a resistive path to 2.5 V inside the output filter. It would pull the whole range toward VREF in exactly this way. Flux residue, contamination or a lossy capacitor could all do that. This is inferred from the measurements and the datasheet; it hasn't been confirmed on the board.
+**About C2:** C2 was found to be unfitted after testing. The datasheet's block diagram puts it in the "continuous time post filter" that drives VOUT, and lists 3.3 nF for 20-bit mode with no option to leave it off. So all of these results were taken outside the datasheet's operating conditions. However, the fault was reportedly first seen with C2 fitted (3300 pF), and removing it reportedly made no noticeable difference to the output. That account is anecdotal. If it holds, the missing C2 isn't the cause, though it may still add a small error of its own. Fitting C2 and repeating test 2 would confirm it.
+
+**Why C1 is suspected:** in the datasheet's Figure 5, C1 connects between the C1 pin (pin 9) and VREF, and C2 between the C2 pin (pin 10) and VOUT. Leakage across C1, or from that node to the VREF guard ring, is a resistive path to 2.5 V inside the output filter. It would pull the whole range toward VREF in exactly this way. Flux residue, contamination or a lossy capacitor could all do that. This is inferred from the measurements and the datasheet; it hasn't been confirmed on the board.
+
+## Workaround: hand-set gain value
+
+These tests were run later the same day, with the same setup: C2 not fitted, heater disconnected, VREF 2.5003 V. Every reading in this section is precise; none is approximate.
+
+### Baseline: start-up self-calibration
+
+| Setting | Ideal | Measured |
+|---|---|---|
+| 0% | 0 V | 0.2090 V |
+| 50% | 2.5003 V | 2.5003 V |
+| 100% | 5.0006 V | 4.7909 V |
+
+The span is 4.5819 V, a gain of 0.916. The swing is 2.2913 V below mid-scale and 2.2906 V above it, so the error is symmetric. Mid-scale equals VREF, so self-calibration removes the offset completely.
+
+### Keeping the offset and overwriting only the FCR
+
+The FCR was written straight after self-calibration, with no `clr`, so self-calibration's OCR stayed in place.
+
+| Setting | Ideal | FCR `9D4E41h` | FCR `9D30D8h` (final) |
+|---|---|---|---|
+| 0% | 0 V | 0.0009 V | 0.0016 V |
+| 10% (code 104858) | 0.5001 V | 0.4983 V | 0.5000 V |
+| 25% (code 262144) | 1.2502 V | — | 1.2504 V |
+| 50% | 2.5003 V | 2.5003 V | — |
+| 75% (code 786432) | 3.7505 V | — | 3.7498 V |
+| 90% (code 943718) | 4.5005 V | 4.5017 V | 4.5001 V |
+| 100% | 5.0006 V | 4.9981 V | 4.9983 V |
+
+- **The first estimate was close.** `9D4E41h` was worked out from test 2 and test 4 for a 2.5003 V swing about mid-scale. Measured between 10% and 90%, its gain was 1.00073.
+- **The final value is `9D30D8h`.** It is `9D4E41h` divided by 1.00073. At this value, 10% to 90% reads within 0.5 mV of ideal, a gain error of about 100 ppm.
+- **Mid-scale didn't move when the FCR changed.** It stayed at VREF, so no fixed OCR is needed. Self-calibration's offset correction is kept, and it still adjusts for offset drift at every start-up.
+- **The ends are limited by the supply rails.** 0% stops at 1.6 mV and 100% at 4.9983 V. No calibration value changes this. The gain was therefore fitted at 10% and 90%, not at the ends.
+- **The 75% point is 0.7 mV low.** That is more non-linearity than a healthy DAC1220 should show. It may come from the same fault, or from the missing C2.
+
+### Limits of the workaround
+
+- **It hides the fault instead of fixing it.**
+- **The value is specific to this board.** It must not be used on another board.
+- **It was measured without C2 fitted.** Measure it again once C2 is fitted.
+- **It hasn't been checked over time.** Self-calibration adjusts for temperature and drift at every start-up, but this fixed value doesn't. It hasn't been checked after a power cycle, after warm-up or on another day. Recheck 10% and 90% after a power-up to see whether it drifts.
+
+### In the controller firmware
+
+`PEM_CSC.ino`, on the controller repo's `debug/dac-scaling` branch, now has a constant `DACFullScaleCalibration = 0x9D30D8`. `setup()` writes it with `writeFullScaleCalibration()` straight after `DigitalToAnalogue.begin()`. Setting the constant to 0 keeps the self-calibration's own value. This needs the library's `debug/dac-scaling` branch, because `master` doesn't have `writeFullScaleCalibration()`.
+
+The updated firmware was flashed and checked just after power-up, with codes set by `:DEB:DAC`:
+
+| Setting | Ideal | Controller firmware | Diagnostic sketch (earlier) |
+|---|---|---|---|
+| 10% (code 104858) | 0.5001 V | 0.5005 V | 0.5000 V |
+| 50% (code 524288) | 2.5003 V | 2.5003 V | 2.5003 V |
+| 90% (code 943718) | 4.5005 V | 4.4995 V | 4.5001 V |
+
+All three readings are within 0.5 mV of ideal, and mid-scale is still at VREF. The 10% to 90% span came out at 3.9990 V, against 4.0001 V with the diagnostic sketch, a gain about 300 ppm lower with the same FCR. The board had been running for a while during the diagnostic tests but had just been power-cycled for this one, so warm-up is the likely difference. This wasn't checked further, and the result was accepted as good enough.
 
 ## Recommended next steps
 
 All of these are done with the power off.
 
-1. **Check for leakage at the filter capacitors.** Measure the resistance across C1 (pin 9 to VREF) and C2 (pin 10 to VOUT). Each should read open or many megohms; anything lower is a leakage path. Clean the area around pins 9 and 10 with isopropyl alcohol either way, then re-test.
-2. **Check the capacitor values and types.** 20-bit mode needs C1 = 10 nF and C2 = 3.3 nF, film or C0G. Check that they aren't swapped, aren't the 16-bit values (2.2 nF and 0.22 nF), and aren't a lossy dielectric.
-3. **Try the chip.** If the capacitors and board check out, swap in a known-good DAC1220, or run the same firmware on another board.
+1. **Refit the removed parts: C2 (3300 pF) and the 0 Ω resistor. This is the planned next step.** Then repeat tests 1 and 2, and re-measure the workaround's gain value (10% and 90%). Anecdotally, refitting C2 won't fix the fault. It does put the board back as designed and within the datasheet's conditions, and it turns the anecdote into a measurement. The checks below are then made on a correctly built board.
+2. **Check for leakage at the filter capacitors.** Measure the resistance across C1 (pin 9 to VREF) and C2 (pin 10 to VOUT). Each should read open or many megohms; anything lower is a leakage path. Clean the area around pins 9 and 10 with isopropyl alcohol either way, then re-test.
+3. **Check the capacitor values and types.** 20-bit mode needs C1 = 10 nF and C2 = 3.3 nF, film or C0G. Check that they aren't swapped, aren't the 16-bit values (2.2 nF and 0.22 nF), and aren't a lossy dielectric.
+4. **Try the chip.** If the capacitors and board check out, swap in a known-good DAC1220, or run the same firmware on another board.
 
 After each change, re-run the diagnostic sequence: `clr` and then `pct 0`, `pct 50`, `pct 100`; then `cal` and the same three readings. The fault is fixed when the calibrated readings come out at about 0 V, 2.5 V and 5.0 V. The uncalibrated span should also come out far closer to 5.0 V than the 4.07 V measured here.
 
-**Workaround, if one is needed before the fix:** write the FCR by hand (about `9D4E00h`) and an OCR value that cancels the −32 mV mid-scale offset. This should give close to 0–5 V, but it hides the fault instead of fixing it. The value would also need checking against temperature and over time.
+**Workaround until the fault is fixed:** run self-calibration as usual, then overwrite the FCR with a measured value (`9D30D8h` on this board). See [Workaround: hand-set gain value](#workaround-hand-set-gain-value). It hides the fault instead of fixing it.
 
 **Read-back on future boards:** a wire from GP28 to the DAC1220's SDIO pin lets `regs` show the actual OCR and FCR that self-calibration produces, instead of values inferred from voltages.
 
@@ -148,7 +210,7 @@ These came up during the review. None of them causes the symptom.
 
 ## State after testing
 
-- **Controller firmware restored.** `PEM_CSC` at commit `1f3b62d` was rebuilt against this library's `master` (`82239dd`) and flashed. It answers `*IDN?` with `Hinds PEM controller CSC V02`.
-- **Not a byte-for-byte restore.** The original firmware couldn't be read off the board before testing, so this is a rebuild from source.
-- **Settings should be intact but weren't checked.** The 64 KB filesystem area wasn't rewritten by any upload, so saved settings should survive. Check them anyway.
-- **Library changes are on `debug/dac-scaling` only.** They haven't been merged into `master` or pushed.
+- **The board is running the controller firmware with the workaround.** It was built from `PEM_CSC` on `debug/dac-scaling`, with FCR `9D30D8h`, against this library's `debug/dac-scaling`.
+- **The original firmware wasn't saved.** It couldn't be read off the board before the first test. After the first round of tests, `PEM_CSC` at commit `1f3b62d` was rebuilt from source against this library's `master` (`82239dd`) and flashed; it answered `*IDN?` with `Hinds PEM controller CSC V02`. The diagnostic sketch was then flashed again for the workaround tests.
+- **Settings should be intact but weren't checked.** No upload rewrote the 64 KB filesystem area, so saved settings should survive. Check them anyway.
+- **All changes are on `debug/dac-scaling` branches.** That includes the library changes here and the gain value in `PEM_CSC.ino`. They haven't been merged into `master` or pushed.
