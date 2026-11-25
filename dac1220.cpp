@@ -22,6 +22,8 @@ and clamps before shifting; writeV() no longer shifts twice.
 2026-11-24: calibration-register access for diagnosing gain errors: clearCalibration() (CRST),
 writeOffsetCalibration(), writeFullScaleCalibration(), and register read-back (readRegister() and
 friends, ReadbackWorks()), which needs SDIO wired to the bus's RX pin (see SetReadbackTXPin()).
+2026-11-25: SetReadbackBitBang() (RP2040 only): reads the data bytes by bit-banging SCLK and sampling
+the TX pin, for boards where SDIO reaches only the TX pin.
 */
 
 #include <Arduino.h>
@@ -64,6 +66,9 @@ static const uint32_t CSHighMicros = 20;          // t15: CS high between comman
 // Reads: the DAC drives SDIO 8 to 10 tXIN after the command's last SCLK (t11), so TX is released
 // straight after the command byte, and SDIO is released 4 to 6 tXIN after the last data SCLK (t13).
 static const uint32_t SDIOReleaseMicros = 5;
+// Bit-banged reads: SCLK high and low for 5 us each (100 kHz; the limit is XIN / 10 = 250 kHz). The
+// DAC changes SDIO on the rising edge; the host samples just before the falling edge.
+static const uint32_t BitBangHalfPeriodMicros = 5;
 // Write-only use: a command cut off by a host reset is cancelled by the DAC's I/O recovery timeout,
 // about 100 ms of no SCLK or CS activity at 2.5 MHz. The datasheet advises waiting 150 to 200 ms.
 static const uint32_t IORecoveryMillis = 200;
@@ -80,6 +85,7 @@ DAC1220::DAC1220(SPIClass* spiconnection, bool uselowresolution, uint8_t cs, uin
     ClockPerioduS = clockperiodmicroseconds;
     Verbose = false;
     ReadbackTXPin = -1;
+    ReadbackBitBang = false;
 }
 
 // Call after SPIConnection->begin(). Drives CS high, waits for the I/O recovery timeout (so a
@@ -277,6 +283,16 @@ void DAC1220::SetReadbackTXPin(uint8_t TXPin)
     ReadbackTXPin = TXPin;
 }
 
+void DAC1220::SetReadbackBitBang(bool enable)
+{
+#if defined(ARDUINO_ARCH_RP2040)
+    ReadbackBitBang = enable;
+#else
+    ReadbackBitBang = false; // the SPI peripheral owns SCLK on other cores; not supported
+    (void)enable;
+#endif
+}
+
 void DAC1220::releaseTX()
 {
     if (ReadbackTXPin < 0)
@@ -304,8 +320,26 @@ void DAC1220::restoreTX()
 #endif
 }
 
+// One byte, MSB first, with SCLK and the TX pin under software control (see readRegister()).
+uint8_t DAC1220::bitBangReadByte()
+{
+    uint8_t Value = 0;
+#if defined(ARDUINO_ARCH_RP2040)
+    for (uint8_t Bit = 0; Bit < 8; Bit++)
+    {
+        gpio_put(SCLKPin, 1);                       // the DAC changes SDIO on this edge
+        delayMicroseconds(BitBangHalfPeriodMicros);
+        Value = (Value << 1) | (gpio_get(ReadbackTXPin) ? 1 : 0); // sample before the falling edge
+        gpio_put(SCLKPin, 0);
+        delayMicroseconds(BitBangHalfPeriodMicros);
+    }
+#endif
+    return Value;
+}
+
 // Reads 1 to 3 bytes starting at address, most significant byte first (BD = 0, MSB = 0).
-// Without SDIO wired to the RX pin, this returns whatever the floating RX pin reads.
+// Without SDIO wired to the RX pin, this returns whatever the floating RX pin reads, unless
+// SetReadbackBitBang(true) reads the data bytes from the TX pin instead.
 uint32_t DAC1220::readRegister(uint8_t address, uint8_t numberOfBytes)
 {
     if (numberOfBytes < 1)
@@ -324,12 +358,35 @@ uint32_t DAC1220::readRegister(uint8_t address, uint8_t numberOfBytes)
     SPIConnection->transfer(Command);
     releaseTX();
     delayMicroseconds(CommandToDataMicros); // t9 >= 13 tXIN; covers t11 + t12 (<= 14 tXIN)
+    bool BitBang = ReadbackBitBang && (ReadbackTXPin >= 0);
+#if defined(ARDUINO_ARCH_RP2040)
+    if (BitBang)
+    {
+        // Take SCLK from the SPI peripheral: drive it low (its idle level in mode 1) first.
+        gpio_put(SCLKPin, 0);
+        gpio_set_dir(SCLKPin, GPIO_OUT);
+        gpio_set_function(SCLKPin, GPIO_FUNC_SIO);
+    }
+#endif
     for (uint8_t i = 0; i < numberOfBytes; i++)
     {
-        Value = (Value << 8) | SPIConnection->transfer(0xFF);
+        if (BitBang)
+        {
+            Value = (Value << 8) | bitBangReadByte();
+        }
+        else
+        {
+            Value = (Value << 8) | SPIConnection->transfer(0xFF);
+        }
     }
     digitalWrite(CSPin, HIGH);
     delayMicroseconds(SDIOReleaseMicros);
+#if defined(ARDUINO_ARCH_RP2040)
+    if (BitBang)
+    {
+        gpio_set_function(SCLKPin, GPIO_FUNC_SPI);
+    }
+#endif
     restoreTX();
     SPIConnection->endTransaction();
     delayMicroseconds(CSHighMicros);

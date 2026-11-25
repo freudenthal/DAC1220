@@ -47,6 +47,10 @@ class DAC1220
         // (MOSI) pin. Set the TX pin with SetReadbackTXPin() so the library releases it while the
         // DAC drives SDIO; otherwise TX needs a series resistor (about 1 kOhm) to SDIO.
         void SetReadbackTXPin(uint8_t TXPin);
+        // RP2040 only: read the data bytes by bit-banging SCLK and sampling the TX pin, for boards
+        // where SDIO reaches only the TX pin (no RX wire). Needs SetReadbackTXPin(). The DAC then
+        // drives SDIO (5 V logic) back toward the TX pin, so the board needs a clamp on that pin.
+        void SetReadbackBitBang(bool enable);
         uint32_t readRegister(uint8_t address, uint8_t numberOfBytes); // 1 to 3 bytes, MSB first
         uint16_t readCommandRegister();
         uint32_t readOffsetCalibration();
@@ -63,11 +67,13 @@ class DAC1220
         float ClockPerioduS;
         bool Verbose;
         int16_t ReadbackTXPin;        // -1: not set, TX is left driving during reads
+        bool ReadbackBitBang;         // true: read data bytes by bit-banging SCLK, sampling TX
         void writeCommandRegister(uint8_t Byte1, uint8_t Byte0);
         void writeRegister24(uint8_t command, uint32_t value);
         uint8_t FormatByte();
         void releaseTX();
         void restoreTX();
+        uint8_t bitBangReadByte();
 };
 
 #endif

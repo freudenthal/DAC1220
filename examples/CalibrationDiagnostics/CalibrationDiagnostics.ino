@@ -15,6 +15,7 @@ Serial commands (115200 baud, one per line):
   clr         clear calibration: OCR = 000000h, FCR = 800000h (uncalibrated)
   fcr <hex>   write the FCR, e.g. fcr 800000
   ocr <hex>   write the OCR (24-bit two's complement), e.g. ocr 000000
+  cmr         read back the CMR only (one 2-byte read)
   regs        read back CMR, OCR, FCR and DIR (needs the read-back wiring below)
   verbose     toggle the library's register traces
 
@@ -32,8 +33,11 @@ Test sequence (works on a write-only board; no read-back needed):
      slope; the relationship is linear, so two points give the FCR for the gain you want.
 
 Read-back wiring: SDIO must reach the SPI bus's RX pin as well as its TX pin. On the PEM/PEMCSC
-controller rev01, RX is GP28 (not connected): add a wire from GP28 to the DAC1220 SDIO pin.
-SetReadbackTXPin() makes the library release TX (GP11) while the DAC drives SDIO.
+controller rev01, RX is GP28 (not connected), so on the RP2040 this sketch reads SDIO back through
+TX (GP11) instead: SetReadbackBitBang(true) bit-bangs SCLK (GP10) for the data bytes.
+SetReadbackTXPin() makes the library release TX (GP11) while the DAC drives SDIO. The DAC drives
+SDIO with 5 V logic; on rev01, D19 (3.3 V Zener) clamps GP11. Check the clamp level on a scope
+with `cmr` before using `regs`.
 */
 
 #include <SPI.h>
@@ -82,6 +86,11 @@ void setup()
     DAC_SPI.begin();
 #endif
     Dac.SetReadbackTXPin(TXPin);
+#if defined(ARDUINO_ARCH_RP2040)
+    // rev01 has no RX wire: read SDIO back through TX (GP11) by bit-banging SCLK. On rev01, GP11 is
+    // clamped by D19 (3.3 V Zener to ground) on the GP11 side of R141 (21.5 Ohm) to SDIO.
+    Dac.SetReadbackBitBang(true);
+#endif
     Dac.begin(); // waits out the I/O recovery timeout, sets the format, self-calibrates
     Dac.writeCode(0);
     delay(2000); // time to open the serial monitor
@@ -168,6 +177,13 @@ void runCommand(char* command)
         Serial.print("OCR written: ");
         printHex24(Value);
         Serial.println();
+    }
+    else if (strcmp(command, "cmr") == 0)
+    {
+        // One 2-byte read only: the smallest read, for checking the SDIO levels on a scope first.
+        uint16_t CMR = Dac.readCommandRegister();
+        Serial.print("CMR ");
+        Serial.println(CMR, HEX);
     }
     else if (strcmp(command, "regs") == 0)
     {
