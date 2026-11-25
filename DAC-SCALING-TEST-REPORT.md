@@ -192,11 +192,12 @@ All three readings are within 0.5 mV of ideal, and mid-scale is still at VREF. T
 
 ## Noise and oscillation at VOUT
 
-These tests were run in three rounds, with the 0 Ω resistor out for all of them:
+These tests were run in four rounds, with the 0 Ω resistor out for all of them:
 
 1. **Without C2, probe grounded at TP6** (2026-11-24).
 2. **With C2 fitted, probe grounded at TP6** (2026-11-24).
-3. **With C2 fitted, probe grounded right beside the DAC at C66** (2026-11-25).
+3. **With C2 fitted, probe grounded right beside the DAC at C66** (2026-11-25; probe on 10× by accident).
+4. **Round 3 repeated at 1×**, with its own noise floor (2026-11-25).
 
 > **Correction (2026-11-25):** the probe's 1×/10× switch was set to 10× by accident for all of round 3, while the scope still assumed 1×. Every VOUT amplitude measured in round 3 was therefore 10 times too low. An earlier version of this report took that drop as an effect of the shorter ground. The round 3 figures below are corrected (raw reading × 10). Rounds 1 and 2 were taken at 1× and are unaffected.
 
@@ -282,20 +283,54 @@ Only the probe's ground changed from round 2, but the probe was also on 10× by 
 
 - **The ground lead doesn't change the 12 kHz signal.** With the correction, round 3 matches round 2 to within about 10%. The signal is about 60 mV RMS (about 180 mV peak-to-peak) relative to the ground right beside the DAC. Its frequency still follows the DAC code, so it is tied to the DAC's output path.
 - **The short ground does reduce the pickup, by about 5 times:** the 406 kHz spikes, from about 15 mV to about 3 mV peak, and the 10–100 MHz energy, from 2.7 to about 0.5 mV.
-- **Low-frequency noise wasn't resolved in round 3.** Below 10 kHz, the raw VOUT readings (4–13 µV per decade) were the same as the floor. At 10× that only shows VOUT is below about 10 times the floor, around 40–130 µV per decade, which is no better than round 1. These bands need measuring again at 1×.
+- **Low-frequency noise wasn't resolved in round 3.** Below 10 kHz, the raw VOUT readings (4–13 µV per decade) were the same as the floor. At 10× that only shows VOUT is below about 10 times the floor, around 40–130 µV per decade, which is no better than round 1. Round 4 measured these bands again at 1×.
 - **The round 3 noise floor** (tip on the C66 ground, 10×) is 4–12 µV per decade below 10 kHz, and 44 µV for 10–100 MHz. Most of this is the scope's own noise, which the probe setting doesn't affect.
+
+### Round 4: round 3 repeated at 1×
+
+Same setup as round 3 (C2 fitted, short ground at C66), with the probe on 1×. A DC reading on the scope (2.573 V at mid-scale) confirmed the 1× setting. The scales match round 3's effective scales: 50 mV/div (200 mV/div for 10 µs/div at full bandwidth). The noise floor was taken with the probe tip on the C66 ground wire at the pad, at the same settings. A 10-second capture at 1 kS/s and 5 mV/div was added for the low frequencies. At that rate, the scope's high-res averaging (1 ms per sample) suppresses the 12 kHz signal about 1,500 times.
+
+**The 12 kHz signal:**
+
+| DAC code | Output | Frequency | Total RMS | Peak-to-peak |
+|---|---|---|---|---|
+| 104858 | 10% | 11.90 kHz | 65 mV | 169 mV |
+| 524288 | 50% | 12.05 kHz | 67 mV | 174 mV |
+| 528609 | 50.4% | 12.05 kHz | 67 mV | 175 mV |
+| 943718 | 90% | 12.21 kHz | 53 mV | 140 mV |
+
+At mid-scale the fundamental is 64–66 mV RMS, and the 2nd and 3rd harmonics are about 10 and 8 mV. This matches round 2 and the corrected round 3.
+
+**VOUT against the 1× noise floor:**
+
+| Band | VOUT | Floor | Verdict |
+|---|---|---|---|
+| 0.1–10 Hz | ~1 µV per decade | 8–11 µV | Not a reliable measurement (see below) |
+| 10–100 Hz | 73 µV | 53 µV, mostly mains at 30, 60 and 90 Hz | Near the floor |
+| 100 Hz–1 kHz | 18–36 µV | 24–68 µV | At the floor |
+| 1–10 kHz | 37–50 µV | 19–21 µV | Slightly above; probably the edge of the 12 kHz signal |
+| **10–100 kHz** | **~67 mV** | **16–21 µV** | **The 12 kHz signal and its harmonics** |
+| 100 kHz–1 MHz | 470–580 µV | 25–48 µV | Above the floor: higher harmonics of the 12 kHz |
+| 1–10 MHz | 120–180 µV | 86–128 µV | Near the floor |
+| 10–100 MHz | 380 µV | 280–300 µV | Near the floor; pickup |
+| 10–100 MHz, full bandwidth | 1.66 mV | 1.55 mV | At the floor |
+
+- **Apart from the 12 kHz signal and its harmonics, VOUT is near the 1× floor in every band.**
+- **The short ground reduces pickup by about 6.5 times.** The 406 kHz spikes are about 2.0 mV peak on VOUT and 1.6–1.8 mV on the floor, against 15.7 mV in round 1 (TP6 ground, 1×). Everything above 100 kHz is about 6.5 times smaller than in round 1 (430 µV against 2.8 mV RMS).
+- **The 0.1–10 Hz reading isn't reliable.** The 10-second capture gave about 1 µV per decade for VOUT, the same order as the DAC's specified 1 µV RMS. But the scope's AC coupling filters out the lowest frequencies and may cut off as high as about 10 Hz, so the reading may be too low. Also, with the tip on ground, the probe loop picked up more mains (8–11 µV), so that floor doesn't bound the VOUT reading. A proper 0.1–10 Hz measurement needs a DC-coupled low-noise preamplifier, or the 8846A logging readings over time.
+- **The 50 Hz and 150 Hz peaks in the 10-second capture aren't mains.** Mains is 60 Hz here. At 1 kS/s, the 12.05 kHz signal folds down to 50 Hz, and its 3rd harmonic, 36.15 kHz, to 150 Hz.
 
 ### Not measured
 
 - **VOUT without C2 using the C66 ground,** at 1×. This needs C2 removed again.
-- **Round 3 at 1×.** Low-frequency noise with the short ground, and the noise floor at 1×.
+- **Noise from 0.1 to 10 Hz,** reliably (see round 4).
 - **Probe loading.** The probe's capacitance loads VOUT and may affect the 12 kHz signal.
 
 ## DC output with C2 fitted
 
 Measured on 2026-11-25 with a Fluke 8846A 6½-digit meter over RS-232, through the same probe at 1×, grounded at C66. Settings: 10 V range, 10 power-line cycles per reading, 5 readings per point. The board ran the controller firmware with the gain workaround (FCR `9D30D8h`), with the DAC set by `:DEB:DAC`. C2 was fitted and the 0 Ω resistor was out.
 
-**VREF:** 2.50020 V on the meter's high-impedance input, and 2.50014 V on 10 MΩ. The 60 µV difference is the probe's own resistance, about 240 Ω; VOUT shows the same. VREF is steady to a few µV and doesn't change with the DAC code. It matches the 2.5003 V measured on 2026-11-24 with a handheld meter.
+**VREF:** 2.50020 V on the meter's high-impedance input, and 2.50014 V on 10 MΩ. The 60 µV difference is the probe's own resistance, about 240 Ω; VOUT shows the same. VREF is steady to a few µV and doesn't change with the DAC code. It matches the 2.5003 V measured on 2026-11-24 with a handheld meter. There was no good point to clamp the probe on VREF, so the tip was held there by hand during these readings.
 
 **VOUT** (10 MΩ input; ideal values from VREF = 2.50020 V):
 
@@ -338,9 +373,9 @@ These came up during the review. None of them causes the symptom.
 
 - **The board is running the controller firmware with the workaround.** It was built from `PEM_CSC` on `debug/dac-scaling`, with FCR `9D30D8h`, against this library's `debug/dac-scaling`. The DAC is held at mid-scale by `:DEB:DAC`.
 - **Hardware:** C2 (3300 pF) is fitted. The 0 Ω resistor is still out. A 2 cm test wire is soldered to the VOUT pad, and an 8 cm ground wire to the ground side of C66.
-- **Probe:** set to 1×, ground wire at C66. The probe's BNC goes to the Fluke 8846A through a BNC-to-banana adapter, and the tip is on VREF. Move it back to the VOUT wire before measuring VOUT.
-- **Fluke 8846A:** on RS-232 (`/dev/ttyUSB0`, 115200 baud, CR line ending), in remote mode, with the 8845A/46A command set selected. It is on the 10 V DC range at 10 power-line cycles, 10 MΩ input. Its front panel returns with `SYST:LOC` or its LOCAL button.
-- **The oscilloscope is still set up for the noise tests,** but nothing is connected to it. Its original setup is saved in `~/Arduino/.llm/scratch/pemcsc-dac-scaling/scope-setup-original.txt`.
+- **Probe:** set to 1×, ground wire at C66, connected to the oscilloscope. After the round 4 noise floor, the tip is on the C66 ground wire. Move it back to the VOUT wire before measuring VOUT.
+- **Fluke 8846A:** on RS-232 (`/dev/ttyUSB0`, 115200 baud, CR line ending), in remote mode, with the 8845A/46A command set selected, but not connected to the board. It is on the 10 V DC range at 10 power-line cycles, 10 MΩ input. Its front panel returns with `SYST:LOC` or its LOCAL button.
+- **The oscilloscope is still set up for the noise tests.** Its original setup is saved in `~/Arduino/.llm/scratch/pemcsc-dac-scaling/scope-setup-original.txt`.
 - **The original firmware wasn't saved.** It couldn't be read off the board before the first test. After the first round of tests, `PEM_CSC` at commit `1f3b62d` was rebuilt from source against this library's `master` (`82239dd`) and flashed; it answered `*IDN?` with `Hinds PEM controller CSC V02`. The diagnostic sketch was then flashed again for the workaround tests.
 - **Settings should be intact but weren't checked.** No upload rewrote the 64 KB filesystem area, so saved settings should survive. Check them anyway.
 - **All changes are on `debug/dac-scaling` branches.** That includes the library changes here and the gain value in `PEM_CSC.ino`. They haven't been merged into `master` or pushed.
