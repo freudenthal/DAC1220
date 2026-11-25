@@ -3,11 +3,11 @@
 **Date:** 2026-11-24
 **Branch:** `debug/dac-scaling` (commits `38802ae` and `a0976f8`, on top of `82239dd`)
 **Hardware:** PEM/PEMCSC controller rev01, RP2040, DAC1220E
-**Status:** The cause is not found yet, but it is almost certainly in the hardware. The firmware, the library and the start-up timing are ruled out. A load on VOUT is unlikely. A hand-set gain value works around the fault to within about 0.7 mV between 10% and 90%. See [Workaround: hand-set gain value](#workaround-hand-set-gain-value). VOUT also oscillates at about 12 kHz: about 1 mV RMS without C2, and about 65 mV RMS (175 mV peak-to-peak) with C2 fitted. See [Noise and oscillation at VOUT](#noise-and-oscillation-at-vout).
+**Status:** The cause is not found yet, but it is almost certainly in the hardware. The firmware, the library and the start-up timing are ruled out. A load on VOUT is unlikely. A hand-set gain value works around the fault to within about 0.7 mV between 10% and 90%. See [Workaround: hand-set gain value](#workaround-hand-set-gain-value). VOUT also carries a 12 kHz signal whose frequency follows the DAC code. With C2 fitted it measures about 6 mV RMS (18 mV peak-to-peak) relative to the ground beside the DAC. Apart from that, VOUT is at the oscilloscope's noise floor. Earlier readings with a long probe ground lead overstated this signal about 11 times. See [Noise and oscillation at VOUT](#noise-and-oscillation-at-vout).
 
 > **Added after testing:** the output filter capacitor C2 (pin 10 to VOUT) was not fitted during any of these tests. The datasheet treats it as a required part of the output filter. Anecdotally, though, the fault first appeared with C2 fitted (3300 pF), and removing it made no noticeable difference. So the missing C2 probably isn't the cause, but this hasn't been confirmed by measurement. See [Conclusions](#conclusions).
 >
-> **Later:** C2 was refitted for the noise tests, with the 0 Ω resistor still out. With C2 fitted, the output oscillates strongly. The gain with C2 fitted hasn't been measured yet.
+> **Later:** C2 was refitted for the noise tests, with the 0 Ω resistor still out. With C2 fitted, VOUT carries a 12 kHz signal of about 6 mV RMS. The gain with C2 fitted hasn't been measured yet.
 
 ## Summary
 
@@ -129,7 +129,7 @@ The normal calibration (CALPIN = 0) disconnects VOUT, so it can't see anything l
 | Leakage or wrong parts at C1 | Open, most likely | Large uncalibrated gain error that calibration can't remove |
 | A damaged or non-genuine DAC1220 | Open | Same evidence |
 | C2 not fitted | Probably not the cause, unconfirmed | Missing for every gain test, but anecdotally the fault was present with C2 fitted and unchanged by removing it |
-| A fault in the DAC's output stage, or a board that doesn't match the datasheet circuit | Open | VOUT oscillates at about 12 kHz, and fitting C2 makes it about 60 times larger (see [Noise and oscillation at VOUT](#noise-and-oscillation-at-vout)) |
+| A fault in the DAC's output stage, or a board that doesn't match the datasheet circuit | Open | VOUT carries a 12 kHz signal, about 6 mV RMS with C2 fitted, whose frequency follows the DAC code (see [Noise and oscillation at VOUT](#noise-and-oscillation-at-vout)) |
 
 **About C2:** C2 was found to be unfitted after testing. The datasheet's block diagram puts it in the "continuous time post filter" that drives VOUT, and lists 3.3 nF for 20-bit mode with no option to leave it off. So all of these results were taken outside the datasheet's operating conditions. However, the fault was reportedly first seen with C2 fitted (3300 pF), and removing it reportedly made no noticeable difference to the output. That account is anecdotal. If it holds, the missing C2 isn't the cause, though it may still add a small error of its own. Fitting C2 and repeating test 2 would confirm it.
 
@@ -192,25 +192,33 @@ All three readings are within 0.5 mV of ideal, and mid-scale is still at VREF. T
 
 ## Noise and oscillation at VOUT
 
-These tests were run later the same day, first without C2 and then with C2 fitted. The 0 Ω resistor stayed out for both.
+These tests were run in three rounds, with the 0 Ω resistor out for all of them:
+
+1. **Without C2, probe grounded at TP6** (2026-11-24).
+2. **With C2 fitted, probe grounded at TP6** (2026-11-24).
+3. **With C2 fitted, probe grounded right beside the DAC at C66** (2026-11-25).
+
+**Read round 3 first.** It showed that the long ground lead used in rounds 1 and 2 caused most of what they measured. Rounds 1 and 2 are kept for the record, but their amplitudes overstate the signal on VOUT.
 
 ### Setup
 
 - **Oscilloscope:** Tektronix DPO4104, controlled over USB.
-- **Probe:** 1× passive probe on a 2 cm wire soldered to a VOUT pad about 8 mm from the DAC. The ground clip was on TP6.
+- **Probe:** 1× passive probe on a 2 cm wire soldered to a VOUT pad about 8 mm from the DAC.
+- **Probe ground, rounds 1 and 2:** the probe's ground clip on TP6, about 6.5 cm from the VOUT wire.
+- **Probe ground, round 3:** an 8 cm, 30 AWG wire soldered to the ground side of C66, about 5 mm from the VOUT wire, and clamped to the probe's ground contact. The ground clip was left unconnected.
 - **Scope settings:** AC coupling, high-res acquisition, 20 MHz bandwidth limit unless the text says "full bandwidth" (1 GHz).
 - **Board:** controller firmware with the gain workaround. The DAC was set by `:DEB:DAC` and held at mid-scale (code 524288) unless stated otherwise. The heater was disconnected.
-- **Noise floor:** the probe tip was moved to TP6, with the ground clip left where it was. This was measured once, without C2.
+- **Noise floor:** the probe tip was moved onto the probe's own ground point, with the ground connection left as it was. It was measured for round 1, with the tip on TP6, and for round 3, with the tip on the C66 ground wire at the pad.
 - **Analysis:** RMS for each decade of frequency, and spectrum peaks, from 10,000- or 100,000-point records.
 
 The scripts and the raw captures are outside this repo, in `~/Arduino/.llm/scratch/pemcsc-dac-scaling/`. The captures are kept only on that PC.
 
-### Without C2
+### Round 1: without C2, TP6 ground
 
 | Component | VOUT | Noise floor | Verdict |
 |---|---|---|---|
 | 1–100 Hz | 5–32 µV RMS | 4–22 µV, mostly 30 and 60 Hz | Near the floor |
-| 100 Hz–10 kHz | 35–42 µV per decade | 9–14 µV | Real, but small |
+| 100 Hz–10 kHz | 35–42 µV per decade | 9–14 µV | Above this floor, but at the floor in round 3 |
 | **Tone at 11.75 kHz, plus harmonics** | **1.09 mV RMS** (harmonics 0.49, 0.27, 0.16 mV) | 10–13 µV in that decade | **Real, from the DAC output path** |
 | Spikes every 2.46 µs (406 kHz), 40–50 ns wide | ~12 mV peak | ~9 mV peak | Mostly pickup by the probe |
 | 30–37 MHz | 2.7 mV RMS (15 mV at full bandwidth) | 1.4 mV (5.8 mV at full bandwidth) | Mostly pickup; the VOUT wire about doubles it |
@@ -226,9 +234,9 @@ The tone's frequency changes with the DAC code, so it comes from the DAC's outpu
 
 A 4321-code step near mid-scale didn't change the tone, but the frequency rises steadily with the output voltage. That looks more like an oscillation in the output stage than an idle tone from the converter. It's an inference, not a confirmed cause.
 
-### With C2 fitted (3300 pF, 0 Ω resistor still out)
+### Round 2: with C2 fitted (3300 pF), TP6 ground
 
-Fitting C2 made the oscillation about 60 times larger. The 5 mV/div captures clipped, so these figures are from 100 mV/div:
+With the TP6 ground, fitting C2 made the 12 kHz signal look about 60 times larger. Round 3 showed that the TP6 ground overstates this signal about 11 times, so the comparison with round 1 isn't reliable. The 5 mV/div captures clipped, so these figures are from 100 mV/div:
 
 | Quantity | Without C2 | With C2 |
 |---|---|---|
@@ -244,23 +252,65 @@ Fitting C2 made the oscillation about 60 times larger. The 5 mV/div captures cli
 | 528609 | 50.4% | 11.75 kHz, 1.09 mV | 12.05 kHz, 64 mV |
 | 943718 | 90% | 12.97 kHz, 1.26 mV | 12.21 kHz, 49 mV |
 
-- **It's the same oscillation, much larger.** The frequency is about the same, so C2 is probably part of the loop that oscillates rather than a new cause.
-- **The frequency depends much less on the output voltage.** It moves only 0.3 kHz from 10% to 90%, against 2.75 kHz without C2.
+- **It looks like the same signal.** The frequency is about the same as in round 1.
+- **The frequency depends much less on the output voltage.** It moves only 0.3 kHz from 10% to 90%, against 2.75 kHz without C2. This held in round 3 too, so it is a real effect of C2.
 - **The waveform is clearly not a sine.** The harmonics are about 16% of the fundamental.
-- **The datasheet's circuit has no such oscillation.** Either the board doesn't match that circuit while the 0 Ω resistor is out, or the DAC's output stage is faulty. Together with the 19% uncalibrated gain error, a faulty chip looks more likely than before. This is an inference.
+
+### Round 3: with C2 fitted, short ground at C66
+
+Only the probe's ground changed from round 2; no components were changed. The board had just been powered up again. The 5 mV/div captures no longer clipped, so this round uses the same settings as round 1.
+
+**At mid-scale:**
+
+| Component | Round 1 (no C2, TP6) | Round 2 (C2, TP6) | **Round 3 (C2, C66)** |
+|---|---|---|---|
+| 12 kHz fundamental | 1.09 mV RMS | 63 mV | **5.8–6.6 mV** |
+| 2nd and 3rd harmonics | 0.49, 0.27 mV | 10.2, 7.6 mV | **~1.0, ~0.8 mV** |
+| Total RMS / peak-to-peak | 1.3 / ~7 mV | 65 / ~175 mV | **6.7 / ~18 mV** |
+| 406 kHz spikes | ~15 mV peak | — | **~0.3 mV peak** |
+| 10–100 MHz (20 MHz limit) | 2.7 mV | — | **0.05 mV** |
+| 10–100 MHz (full bandwidth) | 9.5 mV | — | **0.19 mV** |
+
+**Against the DAC code:**
+
+| DAC code | Output | Frequency | Fundamental (RMS) | Round 2 ÷ round 3 |
+|---|---|---|---|---|
+| 104858 | 10% | 11.90 kHz | 5.7 mV | 10.9 |
+| 524288 | 50% | 12.05 kHz | 5.8 mV | 11.0 |
+| 528609 | 50.4% | 12.05 kHz | 5.9 mV | 10.8 |
+| 943718 | 90% | 12.21 kHz | 5.2 mV | 9.4 |
+
+**VOUT against the round 3 noise floor** (tip on the C66 ground wire at the pad):
+
+| Band | VOUT | Floor | Verdict |
+|---|---|---|---|
+| 1–10 Hz | 4 µV | 4 µV | At the floor |
+| 10–100 Hz | 11 µV | 9 µV | At the floor |
+| 100 Hz–1 kHz | 8–19 µV | 7 µV | At or near the floor |
+| 1–10 kHz | 13 µV | 11–12 µV | At the floor |
+| **10–100 kHz** | **6.7–7.0 mV** | **9–16 µV** | **The 12 kHz signal: about 500 times the floor** |
+| 100 kHz–1 MHz | 50–61 µV | 10 µV | Above the floor: higher harmonics of the 12 kHz |
+| 1–10 MHz | 19–30 µV | 18–27 µV | At the floor |
+| 10–100 MHz | 47 µV | 44 µV | At the floor |
+| 10–100 MHz, full bandwidth | 193 µV | 186 µV | At the floor |
+
+- **The long ground lead caused most of the earlier readings.** The 406 kHz spikes, the 30–37 MHz energy and the extra noise below 10 kHz are all at the floor with the short ground. They were picked up through the loop that the TP6 ground lead formed.
+- **The 12 kHz signal was overstated about 11 times by the TP6 ground.** The same ratio held at every code. So most of the 12 kHz in rounds 1 and 2 was a voltage between TP6 and the ground near the DAC, which suggests a 12 kHz current in the board's ground.
+- **A real 12 kHz signal stays on VOUT:** about 6 mV RMS, 18 mV peak-to-peak, relative to the ground beside the DAC. Its frequency still follows the DAC code, so it is tied to the DAC's output path. With the probe tip on that same ground, only 3 µV of it remains. Its source isn't known.
+- **Apart from the 12 kHz signal, VOUT is as quiet as this scope can measure,** about 10 µV per decade. The DAC's specified noise (1 µV RMS, 0.1–10 Hz) is far below the scope's floor, so it can't be checked this way.
+- **C2's effect on the amplitude isn't known.** Round 1 used the TP6 ground, which overstates the amplitude, so it can't be compared with round 3. A fair comparison needs C2 removed and a capture with the C66 ground.
 
 ### Not measured
 
-- **Whether C2 changes the DC output or the gain.** The scope read the mid-scale average as 2.5407 V, but its DC accuracy at that range is a few tens of mV, so this needs the meter.
-- **Low-frequency noise with C2.** At 100 mV/div the scope can't resolve noise below 10 kHz, so its readings there (50–100 µV per decade) show the scope's limit, not the board.
-- **The noise floor with C2.** It doesn't depend on C2, so it wasn't repeated.
-- **Probe loading.** The 1× probe's capacitance loads VOUT and may affect the oscillation. A check with a 10× probe wasn't done.
+- **Whether C2 changes the DC output or the gain.** In round 2 the scope read the mid-scale average as 2.5407 V, but its DC accuracy at that range is a few tens of mV, so this needs the meter.
+- **VOUT without C2 using the C66 ground.** This needs C2 removed again.
+- **Probe loading.** The 1× probe's capacitance loads VOUT and may affect the 12 kHz signal. A check with a 10× probe wasn't done.
 
 ## Recommended next steps
 
 All of these are done with the power off.
 
-1. **Refit the 0 Ω resistor, and check how C2 and the resistor are connected.** C2 is now back in, but the resistor is still out. Check the C2 and VOUT wiring against the datasheet's Figure 5: C2 between pin 10 and VOUT. Then repeat tests 1 and 2, re-measure the workaround's gain value (10% and 90%), and repeat the noise captures. If the oscillation remains with the board built as designed, the DAC1220 itself is the main suspect.
+1. **Refit the 0 Ω resistor, and check how C2 and the resistor are connected.** C2 is now back in, but the resistor is still out. Check the C2 and VOUT wiring against the datasheet's Figure 5: C2 between pin 10 and VOUT. Then repeat tests 1 and 2, re-measure the workaround's gain value (10% and 90%), and repeat the noise captures with the short ground at C66. If the 12 kHz signal remains with the board built as designed, the DAC1220 itself is the main suspect. For all noise measurements, ground the probe right beside the DAC, as in round 3. A long ground lead overstates the readings many times.
 2. **Check for leakage at the filter capacitors.** Measure the resistance across C1 (pin 9 to VREF) and C2 (pin 10 to VOUT). Each should read open or many megohms; anything lower is a leakage path. Clean the area around pins 9 and 10 with isopropyl alcohol either way, then re-test.
 3. **Check the capacitor values and types.** 20-bit mode needs C1 = 10 nF and C2 = 3.3 nF, film or C0G. Check that they aren't swapped, aren't the 16-bit values (2.2 nF and 0.22 nF), and aren't a lossy dielectric.
 4. **Try the chip.** If the capacitors and board check out, swap in a known-good DAC1220, or run the same firmware on another board.
@@ -280,7 +330,8 @@ These came up during the review. None of them causes the symptom.
 ## State after testing
 
 - **The board is running the controller firmware with the workaround.** It was built from `PEM_CSC` on `debug/dac-scaling`, with FCR `9D30D8h`, against this library's `debug/dac-scaling`. The DAC is held at mid-scale by `:DEB:DAC`.
-- **Hardware:** C2 (3300 pF) is fitted. The 0 Ω resistor is still out. A 2 cm test wire is soldered to the VOUT pad.
+- **Hardware:** C2 (3300 pF) is fitted. The 0 Ω resistor is still out. A 2 cm test wire is soldered to the VOUT pad, and an 8 cm ground wire to the ground side of C66.
+- **Probe:** after the round 3 noise floor, the probe tip is on the C66 ground wire, not on VOUT. Move it back to the VOUT wire before measuring VOUT.
 - **The oscilloscope is still set up for the noise tests.** Its original setup is saved in `~/Arduino/.llm/scratch/pemcsc-dac-scaling/scope-setup-original.txt`.
 - **The original firmware wasn't saved.** It couldn't be read off the board before the first test. After the first round of tests, `PEM_CSC` at commit `1f3b62d` was rebuilt from source against this library's `master` (`82239dd`) and flashed; it answered `*IDN?` with `Hinds PEM controller CSC V02`. The diagnostic sketch was then flashed again for the workaround tests.
 - **Settings should be intact but weren't checked.** No upload rewrote the 64 KB filesystem area, so saved settings should survive. Check them anyway.
